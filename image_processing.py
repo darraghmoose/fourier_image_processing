@@ -59,7 +59,7 @@ for image in os.listdir(present_input_dir):
 
     colour_image = Image.open(f"{present_input_dir}/{image}")
 
-    #split colour image into RGB components and save to list
+    #split colour image into RGB components and save to list [red, green, blue]
     images_list = list(Image.Image.split(colour_image))
 
     #perform fourier transform on all 3 image colour bands
