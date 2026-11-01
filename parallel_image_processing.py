@@ -7,11 +7,6 @@ import os
 from multiprocessing import Pool
 
 """
-PARALLELISATION:
-define all functions
-create main loop to call functions which will actually execute the code
-
-
 Folder Structure 
 
 #Input images
@@ -28,22 +23,15 @@ Folder Structure
 |   |   Wildfires NOT present
 """
 
-#fixed parameters for the code
-
 #colours and colour maps
 colours = ['red', 'green', 'blue']
 colour_maps = ['Reds', 'Greens', 'Blues']
 
 #declare directory where code will run and images are saved
 root_dir = '/home/darraghmoose/University/uni_level_3/phy_3008/group_project' #this folder should have subfolder of images to be process named "/input_images"
-
 #create directory to save outputs to
 main_dir = os.path.join(root_dir, 'wildfires_main') 
 
-"""
-TODO
-implement image compression
-"""
 
 def process_image(jobs):
     "In order to use pool map for parallel processing the function needs to only have one input. This is a tuple of the 4 terms below"
@@ -51,6 +39,8 @@ def process_image(jobs):
 
     #open image from directory given as input and ensure its saved as rgb
     colour_image = Image.open(f"{input_path}").convert('RGB')
+    #compress the image
+    colour_image.thumbnail((1024, 1024))
     
     #split colour image into RGB components and save to list [red, green, blue]
     colour_bands = colour_image.split()
@@ -67,8 +57,11 @@ def process_image(jobs):
         #converting spectrum to log scale makes details easier to visualise
         magnitude_spectrum = 20 * np.log(np.abs(fshift) + 1)
 
-        #save FT of R/G/B component of the image (need to rewrite without plt.imsave())
-        plt.imsave(os.path.join(transforms_dir, f'{name}_{colours[i]}_transformed.png'), magnitude_spectrum, cmap = colour_maps[i], vmin=0, vmax=255)
+        #save image of transformed component
+        cmap = plt.get_cmap(colour_maps[i])     #type: ignore
+        rgba = cmap(magnitude_spectrum / 255)   #convert to rgb image with alpha channel (rgba)
+        picture = (rgba[:, :, :3] * 255).astype(np.uint8)   #drop alpha channel and save in np.uint8 form which PIL can handle
+        Image.fromarray(picture).save(os.path.join(transforms_dir, f'{name}_{colours[i]}_transformed.png'), compress_level=1) #light compression and very fast
     
 
 def create_jobs_list():
@@ -76,7 +69,7 @@ def create_jobs_list():
     #populate jobs path as (input_path, name, components_dir, transforms_dir)
     for flag in ['wildfire_present', 'wildfire_absent']:
         #components and transforms directories
-        components_dir = os.path.join(main_dir, 'components', f'{flag}_components') #declares where we want to save the iamge components to
+        components_dir = os.path.join(main_dir, 'components', f'{flag}_components') #declares where we want to save the image components to
         transforms_dir = os.path.join(main_dir, 'transforms', f'{flag}_transforms')
         os.makedirs(components_dir, exist_ok=True)
         os.makedirs(transforms_dir, exist_ok=True)
@@ -95,5 +88,3 @@ if __name__ == '__main__':
     with Pool(processes = 4) as pool:
         for _ in tqdm(pool.imap_unordered(process_image, jobs), total=len(jobs)):
             pass
-
-        #pool.map(process_image, jobs) cannot track runtime with this
