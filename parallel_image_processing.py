@@ -7,8 +7,6 @@ import os
 from multiprocessing import Pool
 
 """
-Folder Structure 
-
 #Input images
 |   Wildfire present
 |   Wildfires NOT present
@@ -32,9 +30,9 @@ root_dir = '/home/darraghmoose/University/uni_level_3/phy_3008/group_project' #t
 #create directory to save outputs to
 main_dir = os.path.join(root_dir, 'wildfires_main') 
 
-
+#define functions for __main__ to call
 def process_image(jobs):
-    "In order to use pool map for parallel processing the function needs to only have one input. This is a tuple of the 4 terms below"
+    "In order to use pool map for parallel processing, the function needs to only have one input. This is a tuple of the 4 terms below"
     input_path, name, components_dir, transforms_dir = jobs
 
     #open image from directory given as input and ensure its saved as rgb
@@ -63,15 +61,15 @@ def process_image(jobs):
         picture = (rgba[:, :, :3] * 255).astype(np.uint8)   #drop alpha channel and save in np.uint8 form which PIL can handle
         Image.fromarray(picture).save(os.path.join(transforms_dir, f'{name}_{colours[i]}_transformed.png'), compress_level=1) #light compression and very fast
     
-
+#function to create job list of all images to be processed 
 def create_jobs_list():
     jobs = []
     #populate jobs path as (input_path, name, components_dir, transforms_dir)
-    for flag in ['wildfire_present', 'wildfire_absent']:
+    for flag in ['wildfire', 'nowildfire']:     #enter names of image directories here
         #components and transforms directories
         components_dir = os.path.join(main_dir, 'components', f'{flag}_components') #declares where we want to save the image components to
         transforms_dir = os.path.join(main_dir, 'transforms', f'{flag}_transforms')
-        os.makedirs(components_dir, exist_ok=True)
+        os.makedirs(components_dir, exist_ok=True)      #create directories in memory
         os.makedirs(transforms_dir, exist_ok=True)
 
         #find directory containing all input images
@@ -88,3 +86,6 @@ if __name__ == '__main__':
     with Pool(processes = 4) as pool:
         for _ in tqdm(pool.imap_unordered(process_image, jobs), total=len(jobs)):
             pass
+
+#expected 15 minutes for 30,000 350x350 images (1.1GB)
+#processing speed ~73MB/s 
