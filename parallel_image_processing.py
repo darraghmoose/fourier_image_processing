@@ -6,21 +6,6 @@ from PIL import Image
 import os
 from multiprocessing import Pool
 
-"""
-#Input images
-|   Wildfire present
-|   Wildfires NOT present
-
-#Main 
-|   Components
-|   |   Wildfire present
-|   |   Wildfires NOT present
-|
-|   Transforms
-|   |   Wildfire present
-|   |   Wildfires NOT present
-"""
-
 #colours and colour maps
 colours = ['red', 'green', 'blue']
 colour_maps = ['Reds', 'Greens', 'Blues']
@@ -30,10 +15,10 @@ root_dir = '/home/darraghmoose/University/uni_level_3/phy_3008/group_project' #t
 #create directory to save outputs to
 main_dir = os.path.join(root_dir, 'wildfires_main') 
 
-#define functions for __main__ to call
+
 def process_image(jobs):
     "In order to use pool map for parallel processing, the function needs to only have one input. This is a tuple of the 4 terms below"
-    input_path, name, components_dir, transforms_dir = jobs
+    input_path, name, outputs_dir = jobs
 
     #open image from directory given as input and ensure its saved as rgb
     colour_image = Image.open(f"{input_path}").convert('RGB')
@@ -43,40 +28,47 @@ def process_image(jobs):
     #split colour image into RGB components and save to list [red, green, blue]
     colour_bands = colour_image.split()
 
+    #emply list to store transformed colour components in
+    transformed_images = []
+    
     #perform fourier transform on all 3 image colour bands
-    for i in range(3):
-        #save colour component to appropriate directory (not using plt.imsave as its slow)
-        colour_bands[i].save(os.path.join(components_dir, f'{name}_{colours[i]}_components.png'))
-
+    for colour in range(3):
         #perform fft on colour band and shift the zero frequency to the centre. Now higher frequencies radiate outwards
-        fourier_input = np.asarray(colour_bands[i], dtype=np.float32)
-        fshift = fftshift(fft2(fourier_input)) #type:ignore  -  This comments gets rid of false error due to type misunderstanding 
+        fourier_input = np.asarray(colour_bands[colour], dtype=np.float32)
+        fshift = fftshift(fft2(fourier_input)) #type:ignore  -  This comments gets rid of false error flag  
 
         #converting spectrum to log scale makes details easier to visualise
         magnitude_spectrum = 20 * np.log(np.abs(fshift) + 1)
 
-        #save image of transformed component
-        cmap = plt.get_cmap(colour_maps[i])     #type: ignore
-        rgba = cmap(magnitude_spectrum / 255)   #convert to rgb image with alpha channel (rgba)
-        picture = (rgba[:, :, :3] * 255).astype(np.uint8)   #drop alpha channel and save in np.uint8 form which PIL can handle
-        Image.fromarray(picture).save(os.path.join(transforms_dir, f'{name}_{colours[i]}_transformed.png'), compress_level=1) #light compression and very fast
-    
-#function to create job list of all images to be processed 
+        #scale between 0-255 and convert to 8-bit so PIL can procces image
+        scaled = np.clip(magnitude_spectrum, 0, 255).astype(np.uint8)
+
+        #save as a PIL image
+        transformed_images.append(Image.fromarray(scaled, mode='L'))
+
+    #merge rgb components into one image
+    merged_image = Image.merge('RGB', transformed_images)
+
+    #save merged image to diractory of all transforms
+    merged_image.save(os.path.join(outputs_dir, f'{name}_transformed.png'))
+
+
+#create job list of all images to be processed 
 def create_jobs_list():
-    jobs = []
-    #populate jobs path as (input_path, name, components_dir, transforms_dir)
-    for flag in ['wildfire', 'nowildfire']:     #enter names of image directories here
-        #components and transforms directories
-        components_dir = os.path.join(main_dir, 'components', f'{flag}_components') #declares where we want to save the image components to
-        transforms_dir = os.path.join(main_dir, 'transforms', f'{flag}_transforms')
-        os.makedirs(components_dir, exist_ok=True)      #create directories in memory
-        os.makedirs(transforms_dir, exist_ok=True)
+    jobs =[]
+    #populate jobs path
+    for flag in ['wildfire', 'no_wildfire']:    #enter names of image directories here
+        #create output directory
+        output_dir = os.path.join(main_dir, f'{flag}_transformed_images')
+        os.makedirs(output_dir, exist_ok=True)
 
         #find directory containing all input images
         input_dir = os.path.join(root_dir, 'input_images', flag)
+
         #add all images in input directories to jobs list
         for name in os.listdir(input_dir):
-            jobs.append((os.path.join(input_dir, name), name, components_dir, transforms_dir))
+            jobs.append((os.path.join(input_dir, name), name, output_dir))
+
     return jobs
 
 
@@ -84,8 +76,8 @@ def create_jobs_list():
 if __name__ == '__main__':
     jobs = create_jobs_list()
     with Pool(processes = 4) as pool:
-        for _ in tqdm(pool.imap_unordered(process_image, jobs), total=len(jobs)):
+        for _ in tqdm(pool.imap_unordered(process_image, jobs), total=len(jobs),ncols=100, ascii=" ░▒█", desc="Processing images", colour="#00bb82"):
             pass
 
-#expected 15 minutes for 30,000 350x350 images (1.1GB)
-#processing speed ~73MB/s 
+#expected ~8 minutes for 30,000 350x350 images (1.1GB)
+#processing speed ~73MB/s
