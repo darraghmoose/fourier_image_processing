@@ -20,37 +20,44 @@ def process_image(jobs):
     "In order to use pool map for parallel processing, the function needs to only have one input. This is a tuple of the 4 terms below"
     input_path, name, outputs_dir = jobs
 
-    #open image from directory given as input and ensure its saved as rgb
-    colour_image = Image.open(f"{input_path}").convert('RGB')
-    #compress the image
-    colour_image.thumbnail((1024, 1024))
-    
-    #split colour image into RGB components and save to list [red, green, blue]
-    colour_bands = colour_image.split()
+    #wrap in try except block to catch errors
+    try:
+        #open image from directory given as input and ensure its saved as rgb
+        colour_image = Image.open(f"{input_path}").convert('RGB')
+        #compress the image
+        colour_image.thumbnail((1024, 1024))
+        
+        #split colour image into RGB components and save to list [red, green, blue]
+        colour_bands = colour_image.split()
 
-    #emply list to store transformed colour components in
-    transformed_images = []
-    
-    #perform fourier transform on all 3 image colour bands
-    for colour in range(3):
-        #perform fft on colour band and shift the zero frequency to the centre. Now higher frequencies radiate outwards
-        fourier_input = np.asarray(colour_bands[colour], dtype=np.float32)
-        fshift = fftshift(fft2(fourier_input)) #type:ignore  -  This comments gets rid of false error flag  
+        #emply list to store transformed colour components in
+        transformed_images = []
+        
+        #perform fourier transform on all 3 image colour bands
+        for colour in range(3):
+            #perform fft on colour band and shift the zero frequency to the centre. Now higher frequencies radiate outwards
+            fourier_input = np.asarray(colour_bands[colour], dtype=np.float32)
+            fshift = fftshift(fft2(fourier_input)) #type:ignore  -  This comments gets rid of false error flag  
 
-        #converting spectrum to log scale makes details easier to visualise
-        magnitude_spectrum = 20 * np.log(np.abs(fshift) + 1)
+            #converting spectrum to log scale makes details easier to visualise
+            magnitude_spectrum = 20 * np.log(np.abs(fshift) + 1)
 
-        #scale between 0-255 and convert to 8-bit so PIL can procces image
-        scaled = np.clip(magnitude_spectrum, 0, 255).astype(np.uint8)
+            #scale between 0-255 and convert to 8-bit so PIL can procces image
+            scaled = np.clip(magnitude_spectrum, 0, 255).astype(np.uint8)
 
-        #save as a PIL image
-        transformed_images.append(Image.fromarray(scaled, mode='L'))
+            #save as a PIL image
+            transformed_images.append(Image.fromarray(scaled, mode='L'))
 
-    #merge rgb components into one image
-    merged_image = Image.merge('RGB', transformed_images)
+        #merge rgb components into one image
+        merged_image = Image.merge('RGB', transformed_images)
 
-    #save merged image to diractory of all transforms
-    merged_image.save(os.path.join(outputs_dir, f'{name}_transformed.png'))
+        #save merged image to diractory of all transforms
+        merged_image.save(os.path.join(outputs_dir, f'{name}_transformed.png'))
+
+        return None
+
+    except Exception as e:
+         return (input_path, str(e))
 
 
 #create job list of all images to be processed 
@@ -75,9 +82,17 @@ def create_jobs_list():
 #Run the code in parallel
 if __name__ == '__main__':
     jobs = create_jobs_list()
+    failed =[] #track images that fail processing
     with Pool(processes = 4) as pool:
-        for _ in tqdm(pool.imap_unordered(process_image, jobs), total=len(jobs),ncols=100, ascii=" ░▒█", desc="Processing images", colour="#00bb82"):
-            pass
+        for result in tqdm(pool.imap_unordered(process_image, jobs), total=len(jobs),ncols=100, ascii=" ░▒█", desc="Processing images", colour="#00bb82"):
+            if result is not None:
+                failed.append(result)
 
-#expected ~8 minutes for 30,000 350x350 images (1.1GB)
-#processing speed ~73MB/s
+    #report failures
+    print(f'\n{len(failed)} image(s) failed:')
+    for path, err in failed:
+        print(f'{path}: {err}')
+
+
+#~5 minutes for 30,000 350x350 images (1.1GB)
+#processing speed ~225MB/s
