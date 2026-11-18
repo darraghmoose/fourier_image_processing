@@ -52,7 +52,7 @@ def process_image(jobs):
         merged_image = Image.merge('RGB', transformed_images)
 
         #save merged image to diractory of all transforms
-        merged_image.save(os.path.join(outputs_dir, f'{name}_transformed.png'))
+        merged_image.save(os.path.join(outputs_dir, f'{name}_transformed.png'), compress_level=1)
 
         return None
 
